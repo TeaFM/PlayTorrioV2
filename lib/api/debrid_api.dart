@@ -164,6 +164,17 @@ class DebridApi {
     return resolvedFiles;
   }
 
+  // --- Real-Debrid Direct API Key ---
+
+  Future<void> saveRDApiKey(String key) async {
+    await _storage.write(key: 'rd_access_token', value: key);
+    // Clear OAuth-specific fields since we're using a direct key
+    await _storage.delete(key: 'rd_refresh_token');
+    await _storage.delete(key: 'rd_token_expiry');
+    await _storage.delete(key: 'rd_client_id');
+    await _storage.delete(key: 'rd_client_secret');
+  }
+
   // --- TorBox Flow ---
 
   Future<void> saveTorBoxKey(String key) async {

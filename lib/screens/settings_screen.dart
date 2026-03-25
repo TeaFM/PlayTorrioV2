@@ -37,6 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _debridService = 'None';
   final TextEditingController _addonController = TextEditingController();
   final TextEditingController _torboxController = TextEditingController();
+  final TextEditingController _rdApiKeyController = TextEditingController();
   
   // Jackett
   final TextEditingController _jackettUrlController = TextEditingController();
@@ -180,6 +181,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _addonController.dispose();
     _torboxController.dispose();
+    _rdApiKeyController.dispose();
     _jackettUrlController.dispose();
     _jackettApiKeyController.dispose();
     _prowlarrUrlController.dispose();
@@ -662,7 +664,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-          ] else
+          ] else ...[
             ElevatedButton.icon(
               onPressed: _startRDLogin,
               icon: const Icon(Icons.login),
@@ -674,6 +676,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
+            const SizedBox(height: 16),
+            const Text('Or enter API key directly:', style: TextStyle(fontSize: 14, color: Colors.white70)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _rdApiKeyController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      hintText: 'Enter Real-Debrid API Key',
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () async {
+                    final key = _rdApiKeyController.text.trim();
+                    if (key.isEmpty) return;
+                    await _debrid.saveRDApiKey(key);
+                    setState(() {
+                      _isRDLoggedIn = true;
+                    });
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Real-Debrid API Key Saved!')));
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Save', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
