@@ -664,7 +664,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-          ] else ...[
+          ] else
             ElevatedButton.icon(
               onPressed: _startRDLogin,
               icon: const Icon(Icons.login),
@@ -676,6 +676,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
+          if (!_isRDLoggedIn) ...[
             const SizedBox(height: 16),
             const Text('Or enter API key directly:', style: TextStyle(fontSize: 14, color: Colors.white70)),
             const SizedBox(height: 8),
@@ -697,13 +698,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ElevatedButton(
                   onPressed: () async {
                     final key = _rdApiKeyController.text.trim();
-                    if (key.isEmpty) return;
-                    await _debrid.saveRDApiKey(key);
-                    setState(() {
-                      _isRDLoggedIn = true;
-                    });
+                    if (key.isEmpty) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter an API key')));
+                      }
+                      return;
+                    }
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Real-Debrid API Key Saved!')));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Verifying key...')));
+                    }
+                    final result = await _debrid.saveRDApiKey(key);
+                    final success = result.startsWith('Connected');
+                    if (success) {
+                      _rdPollTimer?.cancel();
+                      setState(() {
+                        _isRDLoggedIn = true;
+                        _rdUserCode = null;
+                      });
+                    }
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).clearSnackBars();
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result)));
                     }
                   },
                   style: ElevatedButton.styleFrom(

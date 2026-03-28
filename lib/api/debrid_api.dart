@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class DebridFile {
@@ -80,25 +81,38 @@ class DebridApi {
   }
 
   Future<String?> getRDAccessToken() async {
-    final token = await _storage.read(key: 'rd_access_token');
-    final expiryStr = await _storage.read(key: 'rd_token_expiry');
-    
-    if (token == null || expiryStr == null) return null;
+    // Check for direct API key first (stored via SharedPreferences)
+    final prefs = await SharedPreferences.getInstance();
+    final directKey = prefs.getString('rd_direct_api_key');
+    if (directKey != null && directKey.isNotEmpty) return directKey;
 
-    final expiry = DateTime.parse(expiryStr);
-    if (DateTime.now().isAfter(expiry.subtract(const Duration(minutes: 5)))) {
-      // Refresh token logic here if needed
-      return token; // For now return current
+    // Fall back to OAuth token from secure storage
+    try {
+      final token = await _storage.read(key: 'rd_access_token');
+      final expiryStr = await _storage.read(key: 'rd_token_expiry');
+
+      if (token == null || expiryStr == null) return null;
+
+      final expiry = DateTime.parse(expiryStr);
+      if (DateTime.now().isAfter(expiry.subtract(const Duration(minutes: 5)))) {
+        return token;
+      }
+      return token;
+    } catch (_) {
+      return null;
     }
-    return token;
   }
 
   Future<void> logoutRD() async {
-    await _storage.delete(key: 'rd_access_token');
-    await _storage.delete(key: 'rd_refresh_token');
-    await _storage.delete(key: 'rd_token_expiry');
-    await _storage.delete(key: 'rd_client_id');
-    await _storage.delete(key: 'rd_client_secret');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('rd_direct_api_key');
+    try {
+      await _storage.delete(key: 'rd_access_token');
+      await _storage.delete(key: 'rd_refresh_token');
+      await _storage.delete(key: 'rd_token_expiry');
+      await _storage.delete(key: 'rd_client_id');
+      await _storage.delete(key: 'rd_client_secret');
+    } catch (_) {}
   }
 
   // --- Real-Debrid Flow ---
@@ -166,13 +180,29 @@ class DebridApi {
 
   // --- Real-Debrid Direct API Key ---
 
-  Future<void> saveRDApiKey(String key) async {
-    await _storage.write(key: 'rd_access_token', value: key);
-    // Clear OAuth-specific fields since we're using a direct key
-    await _storage.delete(key: 'rd_refresh_token');
-    await _storage.delete(key: 'rd_token_expiry');
-    await _storage.delete(key: 'rd_client_id');
-    await _storage.delete(key: 'rd_client_secret');
+  /// Verifies the key against RD API, saves if valid.
+  /// Uses SharedPreferences to avoid Keychain issues on unsigned macOS builds.
+  Future<String> saveRDApiKey(String key) async {
+    try {
+      final response = await http.get(
+        Uri.parse('https://api.real-debrid.com/rest/1.0/user'),
+        headers: {'Authorization': 'Bearer $key'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('rd_direct_api_key', key);
+        final username = data['username'] ?? 'Unknown';
+        return 'Connected as $username';
+      } else if (response.statusCode == 401) {
+        return 'Invalid API key. Get your key from real-debrid.com/apitoken';
+      } else {
+        return 'Real-Debrid error: ${response.statusCode}';
+      }
+    } catch (e) {
+      return 'Connection error: $e';
+    }
   }
 
   // --- TorBox Flow ---
